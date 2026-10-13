@@ -6,9 +6,10 @@ on:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
-          - os: windows-latest
+          - os: windows-2022
             architecture: x64
           - os: macos-latest
             architecture: universal
