@@ -1,0 +1,16 @@
+build*/
+reference/
+private-analysis/
+captures/
+.DS_Store
+__pycache__/
+*.o
+*.obj
+*.log
+
+# Local working materials
+/docs/*
+!/docs/build.md
+/Tools/*
+!/Tools/UiPreview.cpp
+/cmake/

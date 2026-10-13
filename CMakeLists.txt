@@ -1,0 +1,72 @@
+cmake_minimum_required(VERSION 3.22)
+project(Ember VERSION 0.1.0 LANGUAGES C CXX)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(JUCE_SOURCE_DIR "" CACHE PATH "Path to a JUCE 8.0.10 source checkout")
+if(JUCE_SOURCE_DIR)
+    add_subdirectory("${JUCE_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/juce")
+else()
+    include(FetchContent)
+    FetchContent_Declare(JUCE GIT_REPOSITORY https://github.com/juce-framework/JUCE.git GIT_TAG 8.0.10 GIT_SHALLOW TRUE)
+    FetchContent_MakeAvailable(JUCE)
+endif()
+add_library(EmberModelData STATIC Source/ModelTables.cpp)
+set_target_properties(EmberModelData PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(EmberModelData PUBLIC Source)
+set(EMBER_AUTO_MANIFEST TRUE)
+if(CMAKE_CROSSCOMPILING)
+    set(EMBER_AUTO_MANIFEST FALSE)
+endif()
+juce_add_plugin(Ember
+    VST3_AUTO_MANIFEST ${EMBER_AUTO_MANIFEST}
+    COMPANY_NAME "Independent Audio"
+    BUNDLE_ID "audio.independent.ember"
+    PLUGIN_MANUFACTURER_CODE InAu
+    PLUGIN_CODE EmbR
+    FORMATS VST3
+    PRODUCT_NAME "Ember"
+    IS_SYNTH FALSE
+    NEEDS_MIDI_INPUT FALSE
+    NEEDS_MIDI_OUTPUT FALSE
+    COPY_PLUGIN_AFTER_BUILD FALSE
+    VST3_CATEGORIES Fx Distortion)
+target_sources(Ember PRIVATE Source/Processor.cpp Source/Editor.cpp)
+target_compile_definitions(Ember PUBLIC JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0)
+target_link_libraries(Ember PRIVATE EmberModelData juce::juce_audio_utils PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
+if(MSVC)
+    target_compile_options(Ember PRIVATE /fp:strict)
+else()
+    target_compile_options(Ember PRIVATE -fno-fast-math -ffp-contract=off)
+endif()
+if(APPLE)
+    add_custom_command(TARGET Ember_VST3 POST_BUILD COMMAND codesign --force --deep --sign - "$<TARGET_BUNDLE_DIR:Ember_VST3>" VERBATIM)
+endif()
+option(EMBER_BUILD_UI_PREVIEW "Build the UI preview utility" OFF)
+if(EMBER_BUILD_UI_PREVIEW)
+    add_executable(UiPreview Tools/UiPreview.cpp)
+    target_include_directories(UiPreview PRIVATE Source)
+    target_link_libraries(UiPreview PRIVATE Ember juce::juce_audio_utils)
+endif()
+
+option(EMBER_BUILD_TESTS "Build DSP component tests" ON)
+if(EMBER_BUILD_TESTS)
+    enable_testing()
+    foreach(test LookupStage FilterStages ControlStages Model44 Model48 ModelHighRate DoubleStages ModelDouble44 ModelDoubleHighRate ModelDouble44Io ModelDoubleHighRateIo BlockScheduler FloatEngine)
+        add_executable(${test}Tests Tests/${test}Tests.cpp)
+        target_link_libraries(${test}Tests PRIVATE EmberModelData)
+        if(MSVC)
+            target_compile_options(${test}Tests PRIVATE /fp:strict)
+        else()
+            target_compile_options(${test}Tests PRIVATE -fno-fast-math -ffp-contract=off)
+        endif()
+        add_test(NAME ${test}Tests COMMAND ${test}Tests)
+    endforeach()
+    add_test(NAME Model44Routing COMMAND Model44Tests routing)
+    add_test(NAME Model48Routing COMMAND Model48Tests routing)
+    add_test(NAME ModelDouble44Routing COMMAND ModelDouble44Tests routing)
+    add_test(NAME ModelDouble48 COMMAND ModelDouble44Tests stereo 48)
+    add_test(NAME ModelDouble48Routing COMMAND ModelDouble44Tests routing 48)
+    add_test(NAME ModelDouble44IoRouting COMMAND ModelDouble44IoTests routing)
+    add_test(NAME ModelDouble48Io COMMAND ModelDouble44IoTests stereo 48)
+    add_test(NAME ModelDouble48IoRouting COMMAND ModelDouble44IoTests routing 48)
+endif()
